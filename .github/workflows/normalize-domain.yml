@@ -1,0 +1,52 @@
+name: Normalize site domain
+on:
+  push:
+    paths: [".github/workflows/normalize-domain.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  replace-domain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace old site domains
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          target = "alkohouse.online"
+          pattern = re.compile(r"(?i)(?:www\.)?(?:alko-?dostavka(?:-?24)?|alkodostavka24)(?:\.vercel\.app|\.(?:ru|com|online))")
+          changed = []
+          for path in Path(".").rglob("*"):
+              if not path.is_file() or ".git" in path.parts:
+                  continue
+              raw = path.read_bytes()
+              if b"\0" in raw[:8192]:
+                  continue
+              try:
+                  text = raw.decode("utf-8")
+              except UnicodeDecodeError:
+                  continue
+              def repl(match):
+                  value = match.group(0)
+                  return "https://" + target if value.lower().startswith(("http://", "https://")) else target
+              updated = pattern.sub(repl, text)
+              if updated != text:
+                  path.write_text(updated, encoding="utf-8")
+                  changed.append(str(path))
+          Path("CNAME").write_text(target + "\n", encoding="utf-8")
+          print(f"Updated {len(changed)} files")
+          for item in changed:
+              print(item)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No domain references required changes"
+          else
+            git commit -m "Replace site domain with alkohouse.online"
+            git push
+          fi
