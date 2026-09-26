@@ -1,0 +1,157 @@
+name: Audit site domain
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/audit-domain.yml"
+      - "**/*.html"
+      - "sitemap.xml"
+      - "robots.txt"
+      - "CNAME"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify every page and domain file
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import unquote, urlparse
+          import os
+          import re
+          import sys
+          import xml.etree.ElementTree as ET
+
+          ROOT = Path(".")
+          DOMAIN = "alkohouse.online"
+          errors = []
+          html_count = 0
+          text_count = 0
+
+          url_pattern = re.compile(r"https?://[^\s\"'<>]+", re.I)
+          old_name_pattern = re.compile(
+              r"(?i)(?:www\.)?(?:alko[-_.]?dostavka(?:[-_.]?24)?|alkodostavka24)"
+              r"(?:\.vercel\.app|\.(?:ru|com|online))"
+          )
+          canonical_pattern = re.compile(
+              r"<link\b(?=[^>]*\brel=[\"'][^\"']*canonical[^\"']*[\"'])"
+              r"(?=[^>]*\bhref=[\"']([^\"']+)[\"'])[^>]*>",
+              re.I,
+          )
+
+          for path in ROOT.rglob("*"):
+              if not path.is_file() or ".git" in path.parts or ".github" in path.parts:
+                  continue
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+
+              text_count += 1
+              rel = path.as_posix()
+
+              for match in old_name_pattern.finditer(text):
+                  errors.append(f"{rel}: old site domain remains: {match.group(0)}")
+
+              for raw_url in url_pattern.findall(text):
+                  host = (urlparse(raw_url.rstrip(").,;")).hostname or "").lower()
+                  if host.endswith(".vercel.app"):
+                      errors.append(f"{rel}: deployment domain remains: {raw_url}")
+
+              if path.suffix.lower() == ".html":
+                  html_count += 1
+                  for canonical in canonical_pattern.findall(text):
+                      host = (urlparse(canonical).hostname or "").lower()
+                      if host and host != DOMAIN:
+                          errors.append(f"{rel}: canonical uses {host}: {canonical}")
+
+          cname = Path("CNAME")
+          if not cname.exists() or cname.read_text(encoding="utf-8").strip() != DOMAIN:
+              errors.append(f"CNAME must contain exactly {DOMAIN}")
+
+          robots = Path("robots.txt")
+          if not robots.exists():
+              errors.append("robots.txt is missing")
+          else:
+              robots_text = robots.read_text(encoding="utf-8")
+              expected_sitemap = f"Sitemap: https://{DOMAIN}/sitemap.xml"
+              expected_host = f"Host: https://{DOMAIN}"
+              if expected_sitemap not in robots_text:
+                  errors.append(f"robots.txt is missing: {expected_sitemap}")
+              if expected_host not in robots_text:
+                  errors.append(f"robots.txt is missing: {expected_host}")
+
+          sitemap = Path("sitemap.xml")
+          sitemap_urls = []
+          if not sitemap.exists():
+              errors.append("sitemap.xml is missing")
+          else:
+              try:
+                  tree = ET.parse(sitemap)
+                  sitemap_urls = [
+                      (node.text or "").strip()
+                      for node in tree.getroot().iter()
+                      if node.tag.rsplit("}", 1)[-1] == "loc"
+                  ]
+              except ET.ParseError as exc:
+                  errors.append(f"sitemap.xml is invalid XML: {exc}")
+
+          if not sitemap_urls:
+              errors.append("sitemap.xml contains no <loc> entries")
+          else:
+              duplicates = sorted({url for url in sitemap_urls if sitemap_urls.count(url) > 1})
+              for duplicate in duplicates:
+                  errors.append(f"sitemap.xml duplicate URL: {duplicate}")
+
+              for url in sitemap_urls:
+                  parsed = urlparse(url)
+                  if parsed.scheme != "https" or (parsed.hostname or "").lower() != DOMAIN:
+                      errors.append(f"sitemap.xml has a foreign or non-HTTPS URL: {url}")
+                      continue
+
+                  route = unquote(parsed.path).lstrip("/")
+                  if not route:
+                      candidate = Path("index.html")
+                  elif route.endswith("/"):
+                      candidate = Path(route) / "index.html"
+                  else:
+                      candidate = Path(route)
+                      if candidate.suffix == "":
+                          candidate = candidate / "index.html"
+
+                  if not candidate.is_file():
+                      errors.append(f"sitemap.xml URL has no matching page: {url} -> {candidate}")
+
+          summary_lines = [
+              "## Domain audit",
+              "",
+              f"- Text files checked: {text_count}",
+              f"- HTML pages checked: {html_count}",
+              f"- Sitemap URLs checked: {len(sitemap_urls)}",
+              f"- Required domain: https://{DOMAIN}",
+              f"- Errors: {len(errors)}",
+          ]
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              Path(summary_path).write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
+
+          print("\n".join(summary_lines))
+          if errors:
+              print("\nErrors:")
+              print("\n".join(f"- {error}" for error in errors))
+              sys.exit(1)
+
+          print("\nAll site pages and domain files use the required domain.")
+          PY
