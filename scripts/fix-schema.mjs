@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
-const SITE = 'https://alko-dostavka24.vercel.app';
+const SITE = 'https://alkohouse.online';
 
 const ORG = {
   '@type': 'Organization',
@@ -177,14 +177,14 @@ function fixCatalogOffers(html) {
     '"areaServed": { "@type": "City", "name": "Москва" }',
   ).replace(
     /"availability": "https:\/\/schema.org\/InStock"/g,
-    '"availability": "https://schema.org/InStock",\n                            "priceValidUntil": "2027-12-31",\n                            "seller": { "@id": "https://alko-dostavka24.vercel.app/#organization" }',
+    '"availability": "https://schema.org/InStock",\n                            "priceValidUntil": "2027-12-31",\n                            "seller": { "@id": "https://alkohouse.online/#organization" }',
   );
 }
 
 function fixIndexPublisher(html) {
   return html.replace(
-    '"publisher": { "@id": "https://alko-dostavka24.vercel.app/#business" }',
-    '"publisher": { "@id": "https://alko-dostavka24.vercel.app/#organization" }',
+    '"publisher": { "@id": "https://alkohouse.online/#business" }',
+    '"publisher": { "@id": "https://alkohouse.online/#organization" }',
   ).replace(
     /"@type": \["LocalBusiness", "DeliveryService"\]/,
     '"@type": ["LocalBusiness", "DeliveryService", "Organization"]',
