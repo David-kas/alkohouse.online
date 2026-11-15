@@ -41,7 +41,7 @@ function dataFor(rel, oldTitle, oldDesc, html) {
   let topic = h1 || clean(oldTitle.split(/\s+\|\s+/)[0]);
   if (rel.startsWith('metro/')) topic = clean(oldTitle.match(/метро\s*[«"]([^»"]+)[»"]/i)?.[1] || h1.replace(/^.*метро\s*/i,''));
   if (rel.startsWith('raion/')) topic = clean(oldTitle.match(/Доставка алкоголя\s+(.+?),\s*Москва/i)?.[1] || h1.replace(/^.*район\s*/i,''));
-  if (rel.startsWith('product/')) topic = clean(oldTitle.split(/\s+[—–]\s+(?:купить|заказать)/i)[0]);
+  if (rel.startsWith('product/')) topic = clean(h1 || oldTitle.split(/\s+[—–]\s+(?:купить|заказать|цена)/i)[0]);
   topic = clip(topic, 95);
   const price = oldDesc.match(/(\d[\d\s]{0,7})\s*₽/)?.[1]?.trim();
   let title, desc;
@@ -58,16 +58,39 @@ function dataFor(rel, oldTitle, oldDesc, html) {
     title = topic + (isHouse ? ' — цена и доставка | AlkoHouse' : ' — заказать в Москве | АЛКОдоставка 24');
     desc = isHouse ? 'AlkoHouse: ' + topic + '. ' + (price ? 'Цена ' + price + ' ₽. ' : '') + 'Карточка товара, корзина и сведения об оформлении заказа. 18+.' : 'Товар «' + topic + '» в каталоге АЛКОдоставка 24. ' + (price ? 'Стоимость ' + price + ' ₽. ' : '') + 'Описание и заказ по Москве. 18+.';
   } else if (rel.startsWith('vopros/')) {
-    title = topic + (isHouse ? ' — ответы | AlkoHouse' : ' — справка | АЛКОдоставка 24');
-    desc = (isHouse ? 'Справка AlkoHouse: ' : 'Разъяснения АЛКОдоставка 24: ') + topic + '. ' + clean(oldDesc);
+    title = topic + (isHouse ? ' — FAQ | AlkoHouse' : ' — ответы | АЛКОдоставка 24');
+    desc = (isHouse ? 'Ответы AlkoHouse на вопрос «' : 'Справка АЛКОдоставка 24: «') + topic + '». Условия заказа и важные подробности представлены на странице. 18+.';
+  } else if (/^(faq\.html|faq\/)/.test(rel)) {
+    title = 'Вопросы о заказе алкоголя в Москве' + (isHouse ? ' | AlkoHouse' : ' | АЛКОдоставка 24');
+    desc = isHouse ? 'FAQ AlkoHouse: сроки и стоимость доставки напитков по Москве, оплата, оформление заказа и связь с оператором. Ответы на частые вопросы. 18+.' : 'Вопросы и ответы от АЛКОдоставка 24: оформление заказов, стоимость, сроки доставки, оплата и контакты для Москвы. 18+.';
+  } else if (/^(about|contacts|blog|privacy|policy|catalog)/.test(rel)) {
+    const kind = rel.startsWith('blog') ? 'Статьи и рекомендации о напитках' : rel.startsWith('about') ? 'Информация о сервисе' : rel.startsWith('contacts') ? 'Контакты и оформление заказа' : /privacy|policy/.test(rel) ? 'Информация о правилах сайта' : 'Раздел каталога напитков';
+    title = topic + (isHouse ? ' | AlkoHouse' : ' | АЛКОдоставка 24');
+    desc = (isHouse ? 'AlkoHouse: ' : 'АЛКОдоставка 24: ') + kind + '. ' + (rel.startsWith('blog') ? 'Полезные материалы о выборе, характеристиках и сочетании напитков.' : rel.startsWith('contacts') ? 'Способы связи и информация для оформления заказа в Москве.' : rel.startsWith('about') ? 'Порядок работы, подбор товаров и условия заказа в Москве.' : /privacy|policy/.test(rel) ? 'Условия и положения, опубликованные на сайте.' : 'Ассортимент, категории товаров, цены и информация о заказе в Москве.') + ' 18+.';
   } else {
     title = topic + (isHouse ? ' — выбор и условия | AlkoHouse' : ' — ассортимент и заказ | АЛКОдоставка 24');
-    desc = (isHouse ? 'На AlkoHouse: ' : 'АЛКОдоставка 24 — ') + topic + '. ' + clean(oldDesc);
+    desc = (isHouse ? 'AlkoHouse: ' : 'АЛКОдоставка 24: ') + 'раздел «' + topic + '». Выбор напитков и закусок, сведения о товарах и оформлении заказа в Москве. 18+.';
   }
   const suffix = ' | ' + brand;
-  if (title.length > 78) title = clip(title.endsWith(suffix) ? title.slice(0, -suffix.length) : title, 78 - suffix.length) + suffix;
-  if (desc.length > 159) desc = clip(desc, 152) + (desc.includes('18+') ? ' 18+.' : '.');
-  if (!desc.endsWith('.')) desc += '.';
+  if (title.length > 78) {
+    const tail = /^(faq|vopros)/.test(rel) ? ' — ответы' : rel.startsWith('product/') ? ' — цена' : ' — заказ';
+    title = clip(topic, 78 - suffix.length - tail.length) + tail + suffix;
+  }
+  const has18 = /18\+/.test(desc);
+  let coreDesc = desc.replace(/\s*18\+\.\s*$/, '').trim();
+  const maxCore = has18 ? 151 : 158;
+  if (coreDesc.length > maxCore) {
+    const sentences = coreDesc.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+    let chosen = '';
+    for (const sentence of sentences) {
+      const candidate = (chosen + ' ' + sentence.trim()).trim();
+      if (candidate.length <= maxCore) chosen = candidate;
+      else break;
+    }
+    coreDesc = chosen || clip(coreDesc, maxCore - 1) + '.';
+  }
+  coreDesc = coreDesc.replace(/[.\s]+$/, '') + '.';
+  desc = coreDesc + (has18 ? ' 18+.' : '');
   return {title, desc};
 }
 const pages = filesIn(ROOT).sort();
@@ -76,7 +99,7 @@ for (const full of pages) {
   const rel = path.relative(ROOT, full).split(path.sep).join('/');
   if (/^(admin\/|pc-blocked\.html$|tmp-|google[a-z0-9]|yandex_)/i.test(rel)) continue;
   let html = fs.readFileSync(full, 'utf8');
-  if (html.includes(marker)) continue;
+  html = html.replace(marker, '');
   const titleMatch = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
   const descMatch = html.match(/<meta\b(?=[^>]*\bname\s*=\s*["']description["'])[^>]*>/i);
   const oldDesc = descMatch?.[0].match(/\bcontent\s*=\s*(["'])(.*?)\1/i)?.[2];
