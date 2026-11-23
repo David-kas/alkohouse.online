@@ -1,40 +1,34 @@
-# АЛКОдоставка — статический сайт + Vercel
+# AlkoHouse (Next.js)
 
-Сайт: **https://alkohouse.online**
+Полная пересборка сайта alkohouse.online: Next.js 15, каталог из `data/catalog.json`, корзина, админка, SEO.
 
-## Деплой на Vercel (из GitHub)
-
-1. Загрузите репозиторий на GitHub (см. ниже).
-2. На [vercel.com](https://vercel.com) → **Add New Project** → импортируйте репозиторий.
-3. Framework Preset: **Other** (статический сайт).
-4. В **Environment Variables** добавьте:
-   - `TELEGRAM_BOT_TOKEN` — токен бота от [@BotFather](https://t.me/BotFather)
-   - `TELEGRAM_CHAT_ID` — ID чата, куда приходят заявки
-5. Deploy. Домен `alkohouse.online` привяжите в Settings → Domains.
-
-## Форма заявки
-
-Формы с атрибутом `data-telegram-form` отправляют POST на `/api/telegram` (старые скрипты — на `/api/send-telegram`, тот же обработчик).
-
-**На Vercel обязательно** задайте переменные окружения `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID` — файл `config/telegram.json` в git не попадает.
-
-Локально скопируйте `config/telegram.example.json` → `config/telegram.json` и вставьте токен и chat id.
-
-Проверка API: `GET /api/telegram` → `{"ok":true,"configured":true}`.
-
-## Локальная разработка
+## Локальный запуск
 
 ```bash
 npm install
+npm run migrate:catalog   # при необходимости из data/catalog.seed.json
+cp .env.example .env.local
 npm run dev
 ```
 
-`npm run dev` поднимает статику и API `/api/telegram` на порту 3000. Live Server (5500) API не обслуживает — заявки не уйдут.
+## Переменные окружения
 
-## Генерация SEO-страниц
+См. `.env.example`: `SESSION_SECRET`, `ADMIN_PASSWORD`, `BLOB_READ_WRITE_TOKEN`, `TELEGRAM_*`.
 
-```bash
-npm run generate:seo
-```
+## Скрипты
 
-Константы домена и телефона — в `scripts/generate-seo-pages.mjs`.
+- `npm run build` — продакшен-сборка (147+ SSG-карточек товаров)
+- `npm run migrate:catalog` — миграция каталога с категориями и slug
+- `npm run build:redirects` — карта 301 из `_legacy_backup`
+- `npm run build:seo` — пересборка JSON SEO-блоков главной
+
+## Резервная копия
+
+Старая версия: `_legacy_backup/`, экспорт каталога: `_legacy_backup/catalog-export-*.json`.
+
+## Деплой Vercel
+
+1. Импорт репозитория, Framework Preset: Next.js
+2. Env из `.env.example`
+3. Подключить Blob store
+4. Домен `alkohouse.online`
